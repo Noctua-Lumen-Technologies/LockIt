@@ -55,8 +55,14 @@ jobs:
             9.0.x
             10.0.x
 
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build src/NLTechnologies.LockIt/NLTechnologies.LockIt.csproj --configuration Release --no-restore
+
       - name: Pack
-        run: dotnet pack src/NLTechnologies.LockIt/NLTechnologies.LockIt.csproj --configuration Release --output ./artifacts
+        run: dotnet pack src/NLTechnologies.LockIt/NLTechnologies.LockIt.csproj --configuration Release --no-build --output ./artifacts
 
       - name: Upload NuGet artifact
         uses: actions/upload-artifact@v4
@@ -67,4 +73,4 @@ jobs:
             ./artifacts/*.snupkg
 
       - name: Publish to NuGet.org
-        run: dotnet nuget push ./artifacts/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/i
+        run: dotnet nuget push ./artifacts/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
