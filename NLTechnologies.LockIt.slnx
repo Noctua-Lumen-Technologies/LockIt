@@ -1,0 +1,16 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
+    <File Path="CHANGELOG.md" />
+    <File Path="CONTRIBUTING.md" />
+    <File Path="Directory.Build.props" />
+    <File Path="LICENSE" />
+    <File Path="README.md" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/NLTechnologies.LockIt/NLTechnologies.LockIt.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/NLTechnologies.LockIt.Tests/NLTechnologies.LockIt.Tests.csproj" />
+  </Folder>
+</Solution>
