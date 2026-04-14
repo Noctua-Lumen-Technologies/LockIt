@@ -56,6 +56,15 @@ jobs:
             9.0.x
             10.0.x
 
+      - name: Determine version from tag
+        id: version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG#v}"
+          VERSION="${VERSION#V}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: $VERSION"
+
       - name: Restore
         run: dotnet restore src/NLTechnologies.LockIt/NLTechnologies.LockIt.csproj
 
@@ -69,7 +78,7 @@ jobs:
         run: dotnet build src/NLTechnologies.LockIt/NLTechnologies.LockIt.csproj -c Release --no-restore -f net10.0
 
       - name: Pack
-        run: dotnet pack src/NLTechnologies.LockIt/NLTechnologies.LockIt.csproj -c Release --no-build --output ./artifacts
+        run: dotnet pack src/NLTechnologies.LockIt/NLTechnologies.LockIt.csproj -c Release --no-build --output ./artifacts /p:PackageVersion=${{ steps.version.outputs.version }}
 
       - name: Upload NuGet artifact
         uses: actions/upload-artifact@v4
