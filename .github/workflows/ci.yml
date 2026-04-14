@@ -56,8 +56,20 @@ jobs:
             9.0.x
             10.0.x
 
+      - name: Restore
+        run: dotnet restore src/NLTechnologies.LockIt/NLTechnologies.LockIt.csproj
+
+      - name: Build net8.0
+        run: dotnet build src/NLTechnologies.LockIt/NLTechnologies.LockIt.csproj -c Release --no-restore -f net8.0
+
+      - name: Build net9.0
+        run: dotnet build src/NLTechnologies.LockIt/NLTechnologies.LockIt.csproj -c Release --no-restore -f net9.0
+
+      - name: Build net10.0
+        run: dotnet build src/NLTechnologies.LockIt/NLTechnologies.LockIt.csproj -c Release --no-restore -f net10.0
+
       - name: Pack
-        run: dotnet pack src/NLTechnologies.LockIt/NLTechnologies.LockIt.csproj --configuration Release --output ./artifacts /p:TargetFrameworks="net8.0;net9.0;net10.0"
+        run: dotnet pack src/NLTechnologies.LockIt/NLTechnologies.LockIt.csproj -c Release --no-build --output ./artifacts
 
       - name: Upload NuGet artifact
         uses: actions/upload-artifact@v4
