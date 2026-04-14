@@ -7,7 +7,7 @@
 
     <!-- NuGet package metadata -->
     <PackageId>NLTechnologies.LockIt</PackageId>
-    <Version>2.1.0</Version>
+    <VersionPrefix>0.0.0-local</VersionPrefix>
     <Authors>NLTechnologies</Authors>
     <Description>Lightweight async per-key locking for C#. Serialize concurrent operations on the same key while allowing full parallelism across different keys.</Description>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
