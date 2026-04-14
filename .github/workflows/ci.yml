@@ -1,8 +1,6 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
   release:
@@ -55,11 +53,8 @@ jobs:
             9.0.x
             10.0.x
 
-      - name: Build all TFMs
-        run: |
-          dotnet build src/NLTechnologies.LockIt/NLTechnologies.LockIt.csproj --configuration Release --framework net8.0
-          dotnet build src/NLTechnologies.LockIt/NLTechnologies.LockIt.csproj --configuration Release --framework net9.0
-          dotnet build src/NLTechnologies.LockIt/NLTechnologies.LockIt.csproj --configuration Release --framework net10.0
+      - name: Build
+        run: dotnet build src/NLTechnologies.LockIt/NLTechnologies.LockIt.csproj --configuration Release
 
       - name: Pack
         run: dotnet pack src/NLTechnologies.LockIt/NLTechnologies.LockIt.csproj --configuration Release --no-build --output ./artifacts
