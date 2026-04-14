@@ -6,6 +6,9 @@ on:
   release:
     types: [published]
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
@@ -53,20 +56,8 @@ jobs:
             9.0.x
             10.0.x
 
-      - name: Restore
-        run: dotnet restore src/NLTechnologies.LockIt/NLTechnologies.LockIt.csproj
-
-      - name: Build net8.0
-        run: dotnet build src/NLTechnologies.LockIt/NLTechnologies.LockIt.csproj --configuration Release --no-restore --framework net8.0
-
-      - name: Build net9.0
-        run: dotnet build src/NLTechnologies.LockIt/NLTechnologies.LockIt.csproj --configuration Release --no-restore --framework net9.0
-
-      - name: Build net10.0
-        run: dotnet build src/NLTechnologies.LockIt/NLTechnologies.LockIt.csproj --configuration Release --no-restore --framework net10.0
-
       - name: Pack
-        run: dotnet pack src/NLTechnologies.LockIt/NLTechnologies.LockIt.csproj --configuration Release --no-build --output ./artifacts
+        run: dotnet pack src/NLTechnologies.LockIt/NLTechnologies.LockIt.csproj --configuration Release --output ./artifacts /p:TargetFrameworks="net8.0;net9.0;net10.0"
 
       - name: Upload NuGet artifact
         uses: actions/upload-artifact@v4
