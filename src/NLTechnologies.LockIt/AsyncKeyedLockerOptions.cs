@@ -7,28 +7,35 @@ namespace NLTechnologies.LockIt;
 public sealed class AsyncKeyedLockerOptions
 {
     /// <summary>
-    /// How often the locker scans for idle locks to remove. Default 60s.
+    /// Maximum number of concurrent locks allowed per key. Default 1 (exclusive lock).
+    /// Allow up to 5 concurrent operations per key
+    /// Set to a higher value to allow multiple operations on the same key simultaneously.
+    /// </summary>
+    public int MaxConcurrentLocksPerKey { get; set; } = 1;
+
+    /// <summary>
+    /// How often the locker scans for idle locks to remove. The default 60s.
     /// </summary>
     public TimeSpan LockIdleCleanupInterval { get; set; } = TimeSpan.FromSeconds(60);
 
     /// <summary>
-    /// How long a lock must be idle (no acquisitions) before it becomes eligible for removal. Default 10s.
+    /// How long a lock must be idle (no acquisitions) before it becomes eligible for removal. The default 10s.
     /// </summary>
     public TimeSpan LockIdleCleanupThreshold { get; set; } = TimeSpan.FromSeconds(10);
 
     /// <summary>
-    /// Interval at which long-held locks are checked and possibly logged. Default 10s.
+    /// Interval at which long-held locks are checked and possibly logged. The default 10s.
     /// </summary>
     public TimeSpan LongHeldLockLoggingInterval { get; set; } = TimeSpan.FromSeconds(10);
 
     /// <summary>
-    /// If a lock is held longer than this threshold a warning is logged. Default 30s.
+    /// If a lock is held longer than this threshold, a warning is logged. The default 30s.
     /// </summary>
     public TimeSpan LongHeldLockThreshold { get; set; } = TimeSpan.FromSeconds(30);
 
     /// <summary>
     /// Maximum time <see cref="AsyncKeyedLocker{TKey}.DisposeAsync"/> will wait for in-flight locks
-    /// to drain before force-disposing resources. Default: <c>null</c> (infinite — wait forever).
+    /// to drain before force-disposing resources. Default: <c>null</c> (infinite â€“ wait forever).
     /// </summary>
     public TimeSpan? DisposeDrainTimeout { get; set; }
 
@@ -38,6 +45,9 @@ public sealed class AsyncKeyedLockerOptions
     /// </summary>
     internal void Validate()
     {
+        if (MaxConcurrentLocksPerKey < 1)
+            throw new ArgumentOutOfRangeException(nameof(MaxConcurrentLocksPerKey), MaxConcurrentLocksPerKey, $"{nameof(MaxConcurrentLocksPerKey)} must be at least 1.");
+
         ThrowIfNotPositive(LockIdleCleanupInterval, nameof(LockIdleCleanupInterval));
         ThrowIfNotPositive(LockIdleCleanupThreshold, nameof(LockIdleCleanupThreshold));
         ThrowIfNotPositive(LongHeldLockLoggingInterval, nameof(LongHeldLockLoggingInterval));

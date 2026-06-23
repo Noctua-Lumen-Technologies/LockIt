@@ -15,20 +15,20 @@ namespace NLTechnologies.LockIt;
 /// <item>Cleaned up — after the idle threshold is exceeded, the cleanup timer removes and disposes the <c>LockRef</c>.</item>
 /// </list>
 /// </summary>
-/// <typeparam name="TKey">Type of keys used for locking (e.g. composite key struct).</typeparam>
+/// <typeparam name="TKey">Type of keys used for locking (e.g., composite key struct).</typeparam>
 public sealed class AsyncKeyedLocker<TKey> : IAsyncKeyedLocker<TKey> where TKey : notnull
 {
     #region Internal types
 
-    private sealed class LockRef(long nowTicks)
+    private sealed class LockRef(long nowTicks, int maxConcurrent)
     {
-        public SemaphoreSlim Semaphore { get; } = new SemaphoreSlim(1, 1);
+        public SemaphoreSlim Semaphore { get; } = new(maxConcurrent, maxConcurrent);
         public int RefCount;
         public long LastUsedTicks = nowTicks;
         public long AcquiredAtTicks;
     }
 
-    private sealed class Releaser(AsyncKeyedLocker<TKey> parent, AsyncKeyedLocker<TKey>.LockRef lockRef) : IDisposable
+    private sealed class Releaser(AsyncKeyedLocker<TKey> parent, LockRef lockRef) : IDisposable
     {
         private int _disposed;
         private readonly AsyncKeyedLocker<TKey> _parent = parent ?? throw new ArgumentNullException(nameof(parent));
@@ -49,7 +49,7 @@ public sealed class AsyncKeyedLocker<TKey> : IAsyncKeyedLocker<TKey> where TKey 
 
         public ValueTask DisposeAsync()
         {
-            var r = Interlocked.Exchange(ref _releaser, null);
+            IDisposable? r = Interlocked.Exchange(ref _releaser, null);
             r?.Dispose();
             return default;
         }
@@ -63,6 +63,7 @@ public sealed class AsyncKeyedLocker<TKey> : IAsyncKeyedLocker<TKey> where TKey 
     private int _disposed;
     private readonly TaskCompletionSource _drainComplete = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+    private readonly int _maxConcurrentLocksPerKey;
     private readonly TimeSpan _lockIdleCleanupThreshold;
     private readonly TimeSpan _longHeldThreshold;
     private readonly TimeSpan? _disposeDrainTimeout;
@@ -72,7 +73,7 @@ public sealed class AsyncKeyedLocker<TKey> : IAsyncKeyedLocker<TKey> where TKey 
     private readonly TimeProvider _timeProvider;
     private readonly LockItMetrics _metrics;
 
-    internal int DebugGetRefCount(TKey key) => _locks.TryGetValue(key, out var lr) ? lr.RefCount : -1;
+    internal int DebugGetRefCount(TKey key) => _locks.TryGetValue(key, out LockRef? lr) ? lr.RefCount : -1;
     internal bool DebugHasKey(TKey key) => _locks.ContainsKey(key);
     internal void DebugCleanup() => CleanupStaleLocks();
 
@@ -96,6 +97,7 @@ public sealed class AsyncKeyedLocker<TKey> : IAsyncKeyedLocker<TKey> where TKey 
         options ??= new AsyncKeyedLockerOptions();
         options.Validate();
 
+        _maxConcurrentLocksPerKey = options.MaxConcurrentLocksPerKey;
         _lockIdleCleanupThreshold = options.LockIdleCleanupThreshold;
         _longHeldThreshold = options.LongHeldLockThreshold;
         _disposeDrainTimeout = options.DisposeDrainTimeout;
@@ -128,8 +130,8 @@ public sealed class AsyncKeyedLocker<TKey> : IAsyncKeyedLocker<TKey> where TKey 
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) == 1, this);
         ArgumentNullException.ThrowIfNull(key);
 
-        var nowTicks = _timeProvider.GetTimestamp();
-        LockRef lockRef = _locks.GetOrAdd(key, _ => new LockRef(nowTicks));
+        long nowTicks = _timeProvider.GetTimestamp();
+        LockRef lockRef = _locks.GetOrAdd(key, _ => new LockRef(nowTicks, _maxConcurrentLocksPerKey));
         Interlocked.Increment(ref lockRef.RefCount);
 
         long startTimestamp = _timeProvider.GetTimestamp();
@@ -176,7 +178,13 @@ public sealed class AsyncKeyedLocker<TKey> : IAsyncKeyedLocker<TKey> where TKey 
         return new Releaser(this, lockRef);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    ///
+    /// </summary>
+    /// <param name="key"></param>
+    /// <param name="timeout"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
     public async Task<IAsyncDisposable> AcquireAsync(TKey key, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
     {
         IDisposable releaser = await InternalAcquireAsync(key, timeout, cancellationToken).ConfigureAwait(false);
@@ -188,7 +196,7 @@ public sealed class AsyncKeyedLocker<TKey> : IAsyncKeyedLocker<TKey> where TKey 
     {
         try
         {
-            var lease = await AcquireAsync(key, timeout, cancellationToken).ConfigureAwait(false);
+            IAsyncDisposable lease = await AcquireAsync(key, timeout, cancellationToken).ConfigureAwait(false);
             return TryAcquireResult.Success(lease);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -198,10 +206,7 @@ public sealed class AsyncKeyedLocker<TKey> : IAsyncKeyedLocker<TKey> where TKey 
     }
 
     /// <inheritdoc/>
-    public int GetQueueDepth(TKey key)
-    {
-        return _locks.TryGetValue(key, out var lr) ? Math.Max(0, Volatile.Read(ref lr.RefCount)) : 0;
-    }
+    public int GetQueueDepth(TKey key) => _locks.TryGetValue(key, out LockRef? lr) ? Math.Max(0, Volatile.Read(ref lr.RefCount)) : 0;
 
     private void Release(LockRef lockRef)
     {
@@ -234,7 +239,7 @@ public sealed class AsyncKeyedLocker<TKey> : IAsyncKeyedLocker<TKey> where TKey 
         if (Volatile.Read(ref _disposed) != 1)
             return;
 
-        foreach (var kv in _locks)
+        foreach (KeyValuePair<TKey, LockRef> kv in _locks)
         {
             if (Volatile.Read(ref kv.Value.RefCount) > 0)
                 return;
@@ -251,10 +256,10 @@ public sealed class AsyncKeyedLocker<TKey> : IAsyncKeyedLocker<TKey> where TKey 
     {
         long nowTicks = _timeProvider.GetTimestamp();
 
-        foreach (var kv in _locks)
+        foreach (KeyValuePair<TKey, LockRef> kv in _locks)
         {
-            var key = kv.Key;
-            var lr = kv.Value;
+            TKey key = kv.Key;
+            LockRef lr = kv.Value;
 
             if (Volatile.Read(ref lr.AcquiredAtTicks) != 0)
                 continue;
@@ -262,7 +267,7 @@ public sealed class AsyncKeyedLocker<TKey> : IAsyncKeyedLocker<TKey> where TKey 
             if (Volatile.Read(ref lr.RefCount) > 0)
                 continue;
 
-            var idleDuration = _timeProvider.GetElapsedTime(Volatile.Read(ref lr.LastUsedTicks), nowTicks);
+            TimeSpan idleDuration = _timeProvider.GetElapsedTime(Volatile.Read(ref lr.LastUsedTicks), nowTicks);
             if (idleDuration <= _lockIdleCleanupThreshold)
                 continue;
 
@@ -290,16 +295,16 @@ public sealed class AsyncKeyedLocker<TKey> : IAsyncKeyedLocker<TKey> where TKey 
     {
         long nowTicks = _timeProvider.GetTimestamp();
 
-        foreach (var kv in _locks)
+        foreach (KeyValuePair<TKey, LockRef> kv in _locks)
         {
-            var key = kv.Key;
-            var lr = kv.Value;
+            TKey key = kv.Key;
+            LockRef lr = kv.Value;
 
             long acquiredTicks = Volatile.Read(ref lr.AcquiredAtTicks);
             if (acquiredTicks == 0)
                 continue;
 
-            var heldDuration = _timeProvider.GetElapsedTime(acquiredTicks, nowTicks);
+            TimeSpan heldDuration = _timeProvider.GetElapsedTime(acquiredTicks, nowTicks);
             if (heldDuration > _longHeldThreshold)
             {
                 if (_logger.IsEnabled(LogLevel.Warning))
@@ -350,7 +355,7 @@ public sealed class AsyncKeyedLocker<TKey> : IAsyncKeyedLocker<TKey> where TKey 
 
         _logger.LogDebug("[AsyncKeyedLocker] Disposing resources.");
 
-        foreach (var kv in _locks)
+        foreach (KeyValuePair<TKey, LockRef> kv in _locks)
         {
             kv.Value.Semaphore.Dispose();
         }
@@ -359,10 +364,7 @@ public sealed class AsyncKeyedLocker<TKey> : IAsyncKeyedLocker<TKey> where TKey 
     }
 
     /// <inheritdoc/>
-    public void Dispose()
-    {
-        DisposeAsync().AsTask().GetAwaiter().GetResult();
-    }
+    public void Dispose() => DisposeAsync().AsTask().GetAwaiter().GetResult();
 
     #endregion
 }

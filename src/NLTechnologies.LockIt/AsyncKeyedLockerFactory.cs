@@ -3,7 +3,7 @@
 namespace NLTechnologies.LockIt;
 
 /// <summary>
-/// Constructs new <see cref="AsyncKeyedLocker{TKey}"/> instances with shared logging, metrics and time provider.
+/// Constructs new <see cref="AsyncKeyedLocker{TKey}"/> instances with shared logging, metrics, and time provider.
 /// </summary>
 /// <param name="loggerFactory">Logger factory for creating typed loggers.</param>
 /// <param name="metrics">Optional shared metrics instance.</param>
